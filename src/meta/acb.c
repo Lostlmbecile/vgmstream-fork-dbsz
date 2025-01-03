@@ -115,6 +115,7 @@ typedef struct  {
 typedef struct  {
     uint8_t ReferenceType;
     uint16_t ReferenceIndex;
+    uint32_t CueId;
 } Cue_t;
 
 typedef struct  {
@@ -226,6 +227,10 @@ typedef struct {
     int awbname_count;
     int16_t awbname_list[ACB_MAX_NAMELIST];
     char name[ACB_MAX_NAME];
+
+    /* Addition, to get cue id*/
+    char final_cue_ids[ACB_MAX_NAME];
+    int32_t current_cue_id;
 } acb_header;
 
 
@@ -252,26 +257,52 @@ fail:
     return 0;
 }
 
-//todo safeops, avoid recalc lens 
+// Safer string concatenation, prevents buffer overflows
 static void acb_cat(char* dst, int dst_max, const char* src) {
-    int dst_len = strlen(dst);
-    int src_len = strlen(dst);
-    if (dst_len + src_len > dst_max - 1)
-        return;
-    strcat(dst, src);
+    size_t dst_len = strlen(dst);
+    size_t src_len = strlen(src);
+
+    if (dst_len + src_len + 1 > dst_max) {
+        // Handle error (e.g., log, truncate, etc.)
+        VGM_LOG("acb: acb_cat: String too long, truncating\n");
+        strncat(dst, src, dst_max - dst_len - 1);
+    }
+    else {
+        strcat(dst, src);
+    }
 }
+
+// Safer string copy, prevents buffer overflows
 static void acb_cpy(char* dst, int dst_max, const char* src) {
-    int src_len = strlen(dst);
-    if (src_len > dst_max - 1)
-        return;
-    strcpy(dst, src);
+    size_t src_len = strlen(src);
+
+    if (src_len + 1 > dst_max) {
+        // Handle error
+        VGM_LOG("acb: acb_cpy: String too long, truncating\n");
+        strncpy(dst, src, dst_max - 1);
+        dst[dst_max - 1] = '\0'; // Ensure null-termination
+    }
+    else {
+        strcpy(dst, src);
+    }
 }
 
 static void add_acb_name(acb_header* acb, int8_t Streaming) {
-    if (!acb->cuename_name) {
-        //;VGM_LOG("acb: no name\n");
-        return;
+
+    // Add current_cue_id to final_cue_ids if it's valid
+    if (acb->current_cue_id != -1) {
+        char cue_id_str[16]; // Buffer to hold the string representation of the cue ID
+        snprintf(cue_id_str, sizeof(cue_id_str), "%d", acb->current_cue_id); // Convert to string
+
+        if (strlen(acb->final_cue_ids) > 0) {
+            acb_cat(acb->final_cue_ids, sizeof(acb->final_cue_ids), "; "); // Add separator if not the first ID
+        }
+        acb_cat(acb->final_cue_ids, sizeof(acb->final_cue_ids), cue_id_str);
     }
+
+    // Proceed with name handling only if cuename_name is not NULL
+    if (!acb->cuename_name)
+        return;
 
     /* ignore name repeats */
     if (acb->awbname_count) {
@@ -962,7 +993,7 @@ fail:
 static int preload_acb_cue(acb_header* acb) {
     utf_context* Table = NULL;
     int* p_rows = &acb->Cue_rows;
-    int i, c_ReferenceType, c_ReferenceIndex;
+    int i, c_ReferenceType, c_ReferenceIndex, c_CueID;
 
     if (*p_rows)
         return 1;
@@ -977,12 +1008,15 @@ static int preload_acb_cue(acb_header* acb) {
 
     c_ReferenceType = utf_get_column(Table, "ReferenceType");
     c_ReferenceIndex = utf_get_column(Table, "ReferenceIndex");
+    c_CueID = utf_get_column(Table, "CueId");
 
     for (i = 0; i < *p_rows; i++) {
         Cue_t* r = &acb->Cue[i];
+        r->CueId = -1;
 
         utf_query_col_u8(Table, i, c_ReferenceType, &r->ReferenceType);
         utf_query_col_u16(Table, i, c_ReferenceIndex, &r->ReferenceIndex);
+        utf_query_col_u32(Table, i, c_CueID, &r->CueId);
     }
 
     utf_close(Table);
@@ -995,11 +1029,11 @@ fail:
 
 static int load_acb_cue(acb_header* acb, uint16_t Index) {
     Cue_t* r;
-
     /* read Cue[Index] */
     if (!preload_acb_cue(acb)) goto fail;
     if (Index >= acb->Cue_rows) goto fail;
     r = &acb->Cue[Index];
+    acb->current_cue_id = r->CueId;
     //;VGM_LOG("acb: Cue[%i]: ReferenceType=%i, ReferenceIndex=%i\n", Index, r->ReferenceType, r->ReferenceIndex);
 
 
@@ -1239,6 +1273,8 @@ void load_acb_wave_info(STREAMFILE* sf, VGMSTREAM* vgmstream, int waveid, int po
     if (acb.awbname_count > 0) {
         strncpy(vgmstream->stream_name, acb.name, STREAM_NAME_SIZE);
         vgmstream->stream_name[STREAM_NAME_SIZE - 1] = '\0';
+        strncpy(vgmstream->cue_id, acb.final_cue_ids, STREAM_NAME_SIZE);
+        vgmstream->cue_id[STREAM_NAME_SIZE - 1] = '\0';
     }
 
     /* uncommon */

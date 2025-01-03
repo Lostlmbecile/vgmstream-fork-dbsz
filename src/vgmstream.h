@@ -178,6 +178,7 @@ typedef struct {
     int stream_index;               /* selected subsong (also 1-based) */
     size_t stream_size;             /* info to properly calculate bitrate in case of subsongs */
     char stream_name[STREAM_NAME_SIZE]; /* name of the current stream (info), if the file stores it and it's filled */
+    char cue_id[STREAM_NAME_SIZE];  /* Additional info for acb+awb pairs */
 
     /* mapping config (info for plugins) see channel_mappings.h */
     uint32_t channel_layout;        /* order: FL FR FC LFE BL BR FLC FRC BC SL SR etc (WAVEFORMATEX flags where FL=lowest bit set) */

@@ -9,6 +9,7 @@
 #ifdef WIN32
 #include <io.h>
 #include <fcntl.h>
+#include <Windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -25,6 +26,7 @@
 #ifndef VGMSTREAM_VERSION
 #define VGMSTREAM_VERSION "unknown version " __DATE__
 #endif
+
 #define APP_NAME  "vgmstream CLI decoder " VGMSTREAM_VERSION
 #define APP_INFO  APP_NAME " (" __DATE__ ")"
 
@@ -650,6 +652,11 @@ fail:
 }
 
 int main(int argc, char** argv) {
+#ifdef WIN32
+
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
     cli_config_t cfg = {0};
     bool res, ok;
 
@@ -664,12 +671,7 @@ int main(int argc, char** argv) {
     res = validate_config(&cfg);
     if (!res) goto fail;
 
-#ifdef WIN32
-    /* make stdout output work with windows */
-    if (cfg.play_sdtout) {
-        _setmode(fileno(stdout),_O_BINARY);
-    }
-#endif
+
 
     ok = false;
     for (int i = 0; i < cfg.infilenames_count; i++) {

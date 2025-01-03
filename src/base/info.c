@@ -171,6 +171,11 @@ void describe_vgmstream(VGMSTREAM* vgmstream, char* desc, int length) {
         concatn(length,desc,temp);
     }
 
+    if (vgmstream->cue_id[0] != '\0') {
+        snprintf(temp, TEMPSIZE, "cue id: %s\n", vgmstream->cue_id);
+        concatn(length, desc, temp);
+    }
+
     if (vgmstream->config_enabled) {
         int32_t samples = vgmstream->pstate.play_duration;
 
